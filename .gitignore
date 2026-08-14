@@ -1,0 +1,5 @@
+# Build output. `build.sh` compiles tui/ and installs the binary as bin/.
+tui/target/
+bin/
+
+.DS_Store

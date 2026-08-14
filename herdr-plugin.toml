@@ -1,0 +1,51 @@
+id = "jin.work-inbox"
+name = "work-inbox"
+# 0.2.0 = phase 2: the front end is the Rust TUI under tui/ (crate version kept
+# in step with this one), with the phase 1 fzf implementation as the fallback.
+version = "0.2.0"
+min_herdr_version = "0.8.0"
+# macOS only: the collector uses BSD `stat -f` on the credential file and the
+# front end opens links with /usr/bin/open. Neither has been tried on Linux.
+platforms = ["macos"]
+description = "Collect GitHub review requests, your own PRs, and your unresolved Jira issues into one local cache the prefix+i popup reads instantly."
+
+# The front end is a Rust TUI under tui/, so there is something to compile.
+#
+# `herdr plugin install` RUNS this; `herdr plugin link` skips it. A local
+# checkout is therefore built by hand:
+#
+#     bash build.sh
+#
+# Nothing may depend on this having run. With no bin/work-inbox, ui.sh prints a
+# notice and falls back to the fzf front end this project started as, which is
+# why a skipped or failed build degrades the UI instead of breaking prefix+i.
+#
+# build.sh resolves everything from its own path, so the cwd herdr picks does
+# not matter.
+[[build]]
+command = ["bash", "build.sh"]
+
+# No [[panes]]. The interactive front end is a `type = "popup"` keybinding in
+# the user's own config.toml (see the README) because `herdr plugin pane open`
+# has no width/height options (0.8.0), so a plugin pane cannot express the
+# popup's 90%/80% geometry. Phase 2 replaced fzf with the plugin's own TUI
+# behind that same binding, so the pane entrypoint is not needed for it either.
+
+# Refresh the cache on demand. Plugin action commands run HEADLESS -- fd 0/1/2
+# are not ttys and TERM=dumb -- so collect.sh must never start fzf or anything
+# else interactive. It only fetches and writes cache.json.
+#
+# The command is resolved relative to the plugin root, like reviewr's actions.
+[[actions]]
+id = "refresh"
+title = "work-inbox: refresh cache"
+contexts = ["pane", "workspace"]
+command = ["bash", "collect.sh"]
+
+# Creating a worktree is the reliable "I am starting on something" signal, and
+# it is also the moment the inbox is most likely to be consulted next. Warming
+# the cache here is what makes prefix+i open on already-current data instead of
+# on whatever the last manual refresh left behind.
+[[events]]
+on = "worktree.created"
+command = ["bash", "collect.sh"]

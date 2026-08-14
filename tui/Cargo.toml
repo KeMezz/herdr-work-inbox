@@ -1,0 +1,45 @@
+[package]
+name = "work-inbox"
+version = "0.2.0"
+edition = "2024"
+description = "TUI front end for the jin.work-inbox herdr plugin: reads cache.json, draws it, never touches the network."
+publish = false
+
+[[bin]]
+name = "work-inbox"
+path = "src/main.rs"
+
+# The dependency set is deliberately four crates wide. An HTTP client anywhere in
+# this tree is a defect, not a convenience: the binary reads cache.json and shells
+# out to collect.sh / copy-link.sh / open / herdr, and nothing else. `cargo tree`
+# must stay free of reqwest, hyper, ureq, curl-sys and tokio.
+#
+# One transitive crate looks like a false positive and is not: `mio` appears
+# under crossterm -> signal-hook-mio, which is how crossterm waits on stdin and
+# on SIGWINCH. Feature resolution turns on mio's `net` because signal-hook-mio's
+# v1.0 support requires it, but nothing in the tree opens a socket and the linked
+# binary proves it -- `nm -u target/release/work-inbox | grep -ci 'sock\|conn\|
+# addrinfo\|ssl'` is 0, and it links only libSystem and libiconv. Dropping mio
+# would mean dropping ratatui's crossterm backend, which is the backend.
+[dependencies]
+crossterm = "0.29.0"
+pulldown-cmark = { version = "0.13.4", default-features = false }
+ratatui = "0.30.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+# The whole point of the plugin is that the popup opens instantly -- the fzf front
+# end it replaces draws in 0.063s and this has to beat that. opt-level=3 plus fat
+# LTO and a single codegen unit is the startup-latency setting (JSON parsing of a
+# ~180KB cache is the only real work before the first frame); strip drops the
+# debug symbols that otherwise triple the binary and cost page-ins on a cold
+# start.
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+# panic = "abort" is deliberately NOT set. The contract requires a panic hook that
+# leaves the alternate screen and disables raw mode; the hook does run under
+# abort, but unwinding turns a panic into a plain exit 101 instead of a SIGABRT
+# crash report inside the user's popup.
